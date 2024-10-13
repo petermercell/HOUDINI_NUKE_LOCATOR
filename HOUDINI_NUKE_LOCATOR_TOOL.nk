@@ -1,0 +1,64 @@
+#! C:/Program Files/Nuke15.1v3/nuke-15.1.3.dll -nx
+version 15.1 v3
+define_window_layout_xml {<?xml version="1.0" encoding="UTF-8"?>
+<layout version="1.0">
+    <window x="0" y="0" w="2557" h="1360" screen="0">
+        <splitter orientation="1">
+            <split size="40"/>
+            <dock id="" hideTitles="1" activePageId="Toolbar.1">
+                <page id="Toolbar.1"/>
+            </dock>
+            <split size="1894" stretch="1"/>
+            <splitter orientation="2">
+                <split size="774"/>
+                <dock id="" activePageId="Viewer.1">
+                    <page id="Viewer.1"/>
+                </dock>
+                <split size="544"/>
+                <dock id="" activePageId="DAG.1" focus="true">
+                    <page id="DAG.1"/>
+                    <page id="Curve Editor.1"/>
+                    <page id="DopeSheet.1"/>
+                </dock>
+            </splitter>
+            <split size="615"/>
+            <dock id="" activePageId="Properties.1">
+                <page id="Properties.1"/>
+                <page id="uk.co.thefoundry.backgroundrenderview.1"/>
+                <page id="Scenegraph.1"/>
+            </dock>
+        </splitter>
+    </window>
+</layout>
+}
+Root {
+ inputs 0
+ name C:/Users/WORKSTATION/Desktop/HOUDINI_LOCATOR_FOR_NUKE.nk
+ format "2048 1556 0 0 2048 1556 1 2K_Super_35(full-ap)"
+ proxy_type scale
+ proxy_format "1024 778 0 0 1024 778 1 1K_Super_35(full-ap)"
+ colorManagement Nuke
+ workingSpaceLUT linear
+ monitorLut sRGB
+ monitorOutLUT rec709
+ int8Lut sRGB
+ int16Lut sRGB
+ logLut Cineon
+ floatLut linear
+}
+NoOp {
+ inputs 0
+ name HOUDINI_LOCATOR
+ xpos 14
+ ypos 1247
+ hide_input true
+ addUserKnob {20 User l HOUDINI_LOCATOR}
+ addUserKnob {26 "" +STARTLINE}
+ addUserKnob {2 input l "CSV FILE"}
+ input C:/Users/WORKSTATION/Desktop/matrix_data.csv
+ addUserKnob {26 "" +STARTLINE}
+ addUserKnob {22 calculate l CALCULATE T "import nuke\nimport csv\nimport math\n\n\n# Get the current Nuke node\nref_node = nuke.thisNode()\n\n\n\n# Get the input and output paths from the node parameters\nimage_dir = ref_node\['input'].getValue()\n\n\nTranslateList = \[]\nRotateList = \[]\n\n\n# Path to your CSV file\ncsv_file = image_dir \n\n\n# Initialize variables to store first and last frame numbers\nfirst_frame = None\nlast_frame = None\n\n\n# Read the CSV data and determine the first and last frames\nwith open(csv_file, 'r') as file:\n    reader = csv.DictReader(file)\n    \n    # Collect the data to determine the first and last frames\n    data = \[]\n    for row in reader:\n        frame = int(float(row\['Frame']))\n        data.append((frame, row))\n        if first_frame is None or frame < first_frame:\n            first_frame = frame\n        if last_frame is None or frame > last_frame:\n            last_frame = frame\n\n\n# Initialize empty lists for translation, rotation, and scale values\nfor frame in range(first_frame, last_frame + 1):\n    translation_values = \[frame]  # Start the list with the frame value\n    rotation_values = \[frame]     # Start the list with the frame value\n\n\n# Re-read the CSV data and process each matrix\nwith open(csv_file, 'r') as file:\n    reader = csv.DictReader(file)\n    \n    # Iterate through each row in the CSV file\n    for row in reader:\n        frame = int(float(row\['Frame']))\n        \n        # Create the matrix in the form needed for Nuke (4x4 matrix)\n        matrix = \[\n            float(row\['M00']), float(row\['M01']), float(row\['M02']), float(row\['M03']),\n            float(row\['M10']), float(row\['M11']), float(row\['M12']), float(row\['M13']),\n            float(row\['M20']), float(row\['M21']), float(row\['M22']), float(row\['M23']),\n            float(row\['M30']), float(row\['M31']), float(row\['M32']), float(row\['M33']),\n        ]\n\n\n        # Initialize an empty Matrix4 and set values manually for translation\n        mTranslate = nuke.math.Matrix4()\n        mTranslate.makeIdentity()\n        for i in range(4):\n            for j in range(4):\n                mTranslate\[i*4 + j] = matrix\[i*4 + j]\n\n\n        mTranslate.translationOnly()\n        translate = (mTranslate\[12], mTranslate\[13], mTranslate\[14])\n        translation_values = \[frame]\n        translation_values.extend(translate)\n\n\n        # Initialize Matrix4 and set values for rotation\n        mRotate = nuke.math.Matrix4()\n        mRotate.makeIdentity()\n        for i in range(4):\n            for j in range(4):\n                mRotate\[i*4 + j] = matrix\[i*4 + j]\n\n\n        mRotate.rotationOnly()\n        rotateRad = mRotate.rotationsZXY()\n        rotate = (math.degrees(rotateRad\[0]), math.degrees(rotateRad\[1]), math.degrees(rotateRad\[2]))\n        rotation_values = \[frame]\n        rotation_values.extend(rotate)\n\n\n        # Append values to respective lists\n        TranslateList.append(translation_values)\n        RotateList.append(rotation_values)\n\n\n# Create a new Axis node in Nuke\nAxisResult = nuke.createNode(\"Axis\")\nAxisResult.setName(\"Axis_result\")\n\n\n# Get the Axis translate, rotate, and scale knobs\ntarget_node = AxisResult\ntranslate_knob = target_node\['translate']\nrotate_knob = target_node\['rotate']\n\n\n# Set animated flags for the knobs\ntranslate_knob.setAnimated()\nrotate_knob.setAnimated()\n\n\n# Set keyframes for translation\nfor sublist in TranslateList:\n    frame = int(sublist\[0])  # Assuming the frame is in the first column\n    x_translation = float(sublist\[1])\n    y_translation = float(sublist\[2])\n    z_translation = float(sublist\[3])  \n\n\n    translate_knob.setValue(x_translation, 0, frame)  # Set x translation \n    translate_knob.setValue(y_translation, 1, frame)  # Set y translation\n    translate_knob.setValue(z_translation, 2, frame)  # Set z translation\n\n\n# Set keyframes for rotation\nfor sublist in RotateList:\n    frame = int(sublist\[0])  # Assuming the frame is in the first column\n    x_rotate = float(sublist\[1])\n    y_rotate = float(sublist\[2])\n    z_rotate = float(sublist\[3])  \n\n\n    rotate_knob.setValue(x_rotate, 0, frame)  # Set x rotation \n    rotate_knob.setValue(y_rotate, 1, frame)  # Set y rotation\n    rotate_knob.setValue(z_rotate, 2, frame)  # Set z rotation\n\n" +STARTLINE}
+ addUserKnob {26 "" +STARTLINE}
+ addUserKnob {26 _1 l "" +STARTLINE T "Houdini Locator for Nuke by Peter Mercell 2024"}
+ addUserKnob {26 _2 l "" +STARTLINE T "<a style=\"color: #999999;\"><a style=\"color: #999999;\" href=\"http://www.petermercell.com\" target=\"_blank\" rel=\"noopener\">www.petermercell.com</a>"}
+}
